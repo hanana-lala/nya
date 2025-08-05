@@ -1,2 +1,2 @@
-# nya-crypt
+# nya
 meow
