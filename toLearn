@@ -1,0 +1,165 @@
+import 'dart:math';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Clipboard
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '你喜欢喵吗',
+      theme: ThemeData.dark(),
+      home: const TerminalPage(),
+    );
+  }
+}
+
+class TerminalPage extends StatefulWidget {
+  const TerminalPage({super.key});
+
+  @override
+  State<TerminalPage> createState() => _TerminalPageState();
+}
+
+class _TerminalPageState extends State<TerminalPage> {
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  String log = "人生真是喵喵又咪咪..";
+  bool keyAccepted = false;
+  String key = "";
+
+  static const String MAGIC = "\u200b\u200c\u200d\ufeff";
+  static const List<String> ZERO_WIDTH = ["\u200b", "\u200c", "\u200d", "\ufeff"];
+  static const String VISIBLE = "喵";
+
+  void appendLog(String text) {
+    setState(() {
+      log += "\n$text";
+    });
+    // 滚动到底部
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  String intToZW(int n, [int length = 10]) {
+    String result = "";
+    for (int i = 0; i < length; i++) {
+      result = ZERO_WIDTH[n % 4] + result;
+      n ~/= 4;
+    }
+    return result;
+  }
+
+  int zwToInt(String zwStr) {
+    int n = 0;
+    for (var ch in zwStr.split('')) {
+      n = n * 4 + ZERO_WIDTH.indexOf(ch);
+    }
+    return n;
+  }
+
+  List<int> generateKeyShifts(String key, int length) {
+    List<int> codes = key.codeUnits;
+    return List.generate(length, (i) => codes[i % codes.length]);
+  }
+
+  void handleInput(String cmd) async {
+    appendLog("➜ $cmd");
+    if (!keyAccepted) {
+      if (cmd.trim() == "meow") {
+        key = "meow";
+        keyAccepted = true;
+        appendLog("✅ meow正确~~，开始喵喵喵喵！");
+      } else {
+        appendLog("❌ meow错误（请输入你的喵）");
+      }
+      return;
+    }
+
+    if (cmd.startsWith(MAGIC)) {
+      final input = cmd.substring(MAGIC.length);
+      final parts = input.split(VISIBLE).skip(1).toList();
+      final shifts = generateKeyShifts(key, parts.length);
+      String result = "";
+      for (int i = 0; i < parts.length; i++) {
+        if (parts[i].length < 10) continue;
+        final zw = parts[i].substring(0, 10);
+        final code = zwToInt(zw);
+        result += String.fromCharCode(code - shifts[i]);
+      }
+      appendLog("🔓 解喵结果：\n$result");
+    } else {
+      final shifts = generateKeyShifts(key, cmd.length);
+      String result = MAGIC;
+      for (int i = 0; i < cmd.length; i++) {
+        final shifted = cmd.codeUnitAt(i) + shifts[i];
+        final zw = intToZW(shifted);
+        result += VISIBLE + zw;
+      }
+      // 跨平台 Clipboard
+      try {
+        await Clipboard.setData(ClipboardData(text: result));
+        appendLog("🔐 加meow成功，结果已复制！");
+      } catch (e) {
+        appendLog("⚠️ 加meow成功但复制失败: $e\n$result");
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        padding: const EdgeInsets.all(8),
+        color: Colors.black,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                child: Text(
+                  log,
+                  style: const TextStyle(color: Color(0xff33ff33), fontFamily: 'monospace'),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                const Text("➜ ", style: TextStyle(color: Color(0xff33ff33), fontFamily: 'monospace')),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    style: const TextStyle(color: Color(0xff33ff33), fontFamily: 'monospace'),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    onSubmitted: (value) {
+                      if (value.trim().isEmpty) return;
+                      _controller.clear();
+                      try {
+                        handleInput(value.trim());
+                      } catch (e) {
+                        appendLog("❗ 出错了: $e");
+                      }
+                    },
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+:
